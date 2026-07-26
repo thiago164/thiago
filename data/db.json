@@ -1,0 +1,24 @@
+{
+  "users": [
+    {
+      "id": "8ff87211-c3fb-45a6-8f9c-64ff546d516d",
+      "name": "thiago Ferreira MAllet",
+      "email": "thiagoferreiracpx7@gmail.com",
+      "passwordHash": "$2a$10$1hxks4uHHbkpm36aOIPMiOhMn4VSW.yo/CKCWp2E.rVOWpoWOrXza",
+      "role": "admin",
+      "createdAt": "2026-07-26T23:13:38.282Z"
+    }
+  ],
+  "accounts": [],
+  "categories": [],
+  "captions": [],
+  "videos": [],
+  "activityLog": [
+    {
+      "id": "c6f38ebd-edd3-423d-99d8-cae5656c0150",
+      "userId": "8ff87211-c3fb-45a6-8f9c-64ff546d516d",
+      "message": "Conta criada: thiago Ferreira MAllet",
+      "createdAt": "2026-07-26T23:13:38.282Z"
+    }
+  ]
+}

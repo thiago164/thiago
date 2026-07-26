@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PostFlow — Automação de Postagens</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="logo">📆 <span>PostFlow</span></div>
+
+    <div id="login-form">
+      <h2>Entrar na sua conta</h2>
+      <input id="login-email" type="email" placeholder="E-mail" />
+      <input id="login-password" type="password" placeholder="Senha" />
+      <button class="btn-primary" onclick="doLogin()">Entrar</button>
+      <p class="auth-switch">Não tem conta? <a onclick="showSignup()">Criar conta</a></p>
+      <p id="login-error" class="error"></p>
+    </div>
+
+    <div id="signup-form" class="hidden">
+      <h2>Criar conta</h2>
+      <input id="signup-name" placeholder="Nome" />
+      <input id="signup-email" type="email" placeholder="E-mail" />
+      <input id="signup-password" type="password" placeholder="Senha" />
+      <button class="btn-primary" onclick="doSignup()">Criar conta</button>
+      <p class="auth-switch">Já tem conta? <a onclick="showLogin()">Entrar</a></p>
+      <p id="signup-error" class="error"></p>
+    </div>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="logo">📆 <span>PostFlow</span></div>
+    <p class="version">Automação de postagens · v1.0</p>
+    <nav>
+      <button class="nav-btn active" data-tab="dashboard">📊 Dashboard</button>
+      <button class="nav-btn" data-tab="accounts">📱 Contas</button>
+      <button class="nav-btn" data-tab="upload">🎬 Postar vídeos</button>
+      <button class="nav-btn" data-tab="captions">💬 Legendas</button>
+      <button class="nav-btn" data-tab="admin">🔒 Admin</button>
+    </nav>
+    <div class="sidebar-footer">
+      <span id="user-name-label"></span>
+      <button onclick="logout()">🚪 Sair</button>
+    </div>
+  </aside>
+
+  <main class="content">
+
+    <section id="tab-dashboard" class="tab">
+      <h1>Dashboard</h1>
+      <div class="stats-grid">
+        <div class="stat-card"><span id="stat-total">0</span><label>Total de vídeos</label></div>
+        <div class="stat-card"><span id="stat-postados">0</span><label>Postados</label></div>
+        <div class="stat-card"><span id="stat-pendentes">0</span><label>Pendentes</label></div>
+        <div class="stat-card"><span id="stat-erros">0</span><label>Erros</label></div>
+        <div class="stat-card"><span id="stat-contas">0</span><label>Contas ativas</label></div>
+        <div class="stat-card"><span id="stat-hoje">0</span><label>Postados hoje</label></div>
+      </div>
+      <h3>Próximas postagens</h3>
+      <table class="data-table">
+        <thead><tr><th>Conta</th><th>Arquivo</th><th>Agendado para</th><th>Status</th></tr></thead>
+        <tbody id="upcoming-table"></tbody>
+      </table>
+    </section>
+
+    <section id="tab-accounts" class="tab hidden">
+      <div class="tab-header">
+        <h1>Contas do Instagram</h1>
+        <button class="btn-primary" onclick="openAccountModal()">➕ Adicionar conta</button>
+      </div>
+      <div id="accounts-list" class="cards-grid"></div>
+    </section>
+
+    <section id="tab-upload" class="tab hidden">
+      <h1>Postar vídeos</h1>
+      <form id="upload-form" class="upload-form" onsubmit="return doUpload(event)">
+        <label>Conta do Instagram</label>
+        <select id="upload-account" required></select>
+
+        <label>Nome do lote (opcional)</label>
+        <input id="upload-batch" placeholder="Ex: Lote de terça" />
+
+        <label>Legenda</label>
+        <textarea id="upload-caption" placeholder="Escreva a legenda..."></textarea>
+
+        <label>Hashtags</label>
+        <input id="upload-hashtags" placeholder="#exemplo #video" />
+
+        <label>Número de ciclos (repete o mesmo lote N vezes)</label>
+        <select id="upload-cycles">
+          <option value="1">1 ciclo (padrão)</option>
+          <option value="2">2 ciclos</option>
+          <option value="3">3 ciclos</option>
+          <option value="5">5 ciclos</option>
+          <option value="10">10 ciclos</option>
+        </select>
+
+        <label>Vídeos</label>
+        <input id="upload-files" type="file" multiple accept="video/*" required />
+
+        <button class="btn-primary" type="submit">⬆️ Enviar e agendar</button>
+        <p id="upload-msg"></p>
+      </form>
+    </section>
+
+    <section id="tab-captions" class="tab hidden">
+      <div class="tab-header">
+        <h1>Legendas pré-definidas</h1>
+        <button class="btn-primary" onclick="openCaptionModal()">➕ Nova legenda</button>
+      </div>
+      <div id="captions-list" class="cards-grid"></div>
+    </section>
+
+    <section id="tab-admin" class="tab hidden">
+      <h1>Administrador</h1>
+      <h3>Usuários</h3>
+      <table class="data-table">
+        <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th></tr></thead>
+        <tbody id="users-table"></tbody>
+      </table>
+      <h3>Log de atividades</h3>
+      <ul id="activity-log" class="activity-log"></ul>
+    </section>
+
+  </main>
+</div>
+
+<!-- Modal: adicionar/editar conta -->
+<div id="account-modal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Adicionar conta do Instagram</h2>
+    <input id="acc-label" placeholder="Apelido da conta" />
+    <input id="acc-token" placeholder="Access Token" />
+    <label>Vídeos por dia (máx 50)</label>
+    <input id="acc-videos-per-day" type="number" min="1" max="50" value="5" />
+    <label>Janela de postagem</label>
+    <div class="row">
+      <input id="acc-window-start" type="time" value="09:00" />
+      <input id="acc-window-end" type="time" value="21:00" />
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeAccountModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveAccount()">✅ Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: nova legenda -->
+<div id="caption-modal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Nova legenda</h2>
+    <input id="cap-name" placeholder="Nome" />
+    <textarea id="cap-text" placeholder="Legenda"></textarea>
+    <input id="cap-hashtags" placeholder="Hashtags" />
+    <div class="modal-actions">
+      <button onclick="closeCaptionModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveCaption()">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
