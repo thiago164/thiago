@@ -147,6 +147,7 @@ function saveAccount() {
   const body = {
     label: document.getElementById('acc-label').value,
     accessToken: document.getElementById('acc-token').value,
+    igUserId: document.getElementById('acc-ig-user-id').value,
     videosPerDay: document.getElementById('acc-videos-per-day').value,
     windowStart: document.getElementById('acc-window-start').value,
     windowEnd: document.getElementById('acc-window-end').value

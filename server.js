@@ -48,12 +48,12 @@ function logActivity(db, userId, message) {
 }
 
 // ---------- Auth routes ----------
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Preencha nome, e-mail e senha' });
   }
-  const db = load();
+  const db = await load();
   if (db.users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
     return res.status(409).json({ error: 'Já existe uma conta com esse e-mail' });
   }
@@ -68,14 +68,14 @@ app.post('/api/auth/signup', (req, res) => {
   };
   db.users.push(user);
   logActivity(db, user.id, `Conta criada: ${user.name}`);
-  save(db);
+  await save(db);
   const token = jwt.sign({ id: user.id, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
   res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  const db = load();
+  const db = await load();
   const user = db.users.find(u => u.email.toLowerCase() === (email || '').toLowerCase());
   if (!user || !bcrypt.compareSync(password || '', user.passwordHash)) {
     return res.status(401).json({ error: 'E-mail ou senha incorretos' });
@@ -84,36 +84,36 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
-app.get('/api/auth/me', authMiddleware, (req, res) => {
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
   res.json({ user: req.user });
 });
 
 // ---------- Categorias ----------
-app.get('/api/categories', authMiddleware, (req, res) => {
-  const db = load();
+app.get('/api/categories', authMiddleware, async (req, res) => {
+  const db = await load();
   res.json(db.categories.filter(c => c.userId === req.user.id));
 });
 
-app.post('/api/categories', authMiddleware, (req, res) => {
+app.post('/api/categories', authMiddleware, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
-  const db = load();
+  const db = await load();
   const cat = { id: uuid(), userId: req.user.id, name };
   db.categories.push(cat);
-  save(db);
+  await save(db);
   res.json(cat);
 });
 
-app.delete('/api/categories/:id', authMiddleware, (req, res) => {
-  const db = load();
+app.delete('/api/categories/:id', authMiddleware, async (req, res) => {
+  const db = await load();
   db.categories = db.categories.filter(c => !(c.id === req.params.id && c.userId === req.user.id));
-  save(db);
+  await save(db);
   res.json({ ok: true });
 });
 
 // ---------- Contas Instagram ----------
-app.get('/api/accounts', authMiddleware, (req, res) => {
-  const db = load();
+app.get('/api/accounts', authMiddleware, async (req, res) => {
+  const db = await load();
   const accounts = db.accounts.filter(a => a.userId === req.user.id);
   const withStats = accounts.map(a => {
     const vids = db.videos.filter(v => v.accountId === a.id);
@@ -130,15 +130,17 @@ app.get('/api/accounts', authMiddleware, (req, res) => {
   res.json(withStats);
 });
 
-app.post('/api/accounts', authMiddleware, (req, res) => {
-  const { label, accessToken, categoryId, videosPerDay, windowStart, windowEnd, mode } = req.body;
+app.post('/api/accounts', authMiddleware, async (req, res) => {
+  const { label, accessToken, igUserId, categoryId, videosPerDay, windowStart, windowEnd, mode } = req.body;
   if (!label || !accessToken) return res.status(400).json({ error: 'Label e access token são obrigatórios' });
-  const db = load();
+  if (!igUserId) return res.status(400).json({ error: 'Instagram Business Account ID é obrigatório' });
+  const db = await load();
   const account = {
     id: uuid(),
     userId: req.user.id,
     label,
     accessToken,
+    igUserId,
     categoryId: categoryId || null,
     videosPerDay: Math.min(parseInt(videosPerDay || 5, 10), 50),
     windowStart: windowStart || '09:00',
@@ -149,52 +151,54 @@ app.post('/api/accounts', authMiddleware, (req, res) => {
   };
   db.accounts.push(account);
   logActivity(db, req.user.id, `Conta do Instagram adicionada: ${label}`);
-  save(db);
+  await save(db);
   res.json(account);
 });
 
-app.put('/api/accounts/:id', authMiddleware, (req, res) => {
-  const db = load();
+app.put('/api/accounts/:id', authMiddleware, async (req, res) => {
+  const db = await load();
   const account = db.accounts.find(a => a.id === req.params.id && a.userId === req.user.id);
   if (!account) return res.status(404).json({ error: 'Conta não encontrada' });
-  const { label, categoryId, videosPerDay, windowStart, windowEnd, active } = req.body;
+  const { label, accessToken, igUserId, categoryId, videosPerDay, windowStart, windowEnd, active } = req.body;
   if (label !== undefined) account.label = label;
+  if (accessToken !== undefined) account.accessToken = accessToken;
+  if (igUserId !== undefined) account.igUserId = igUserId;
   if (categoryId !== undefined) account.categoryId = categoryId;
   if (videosPerDay !== undefined) account.videosPerDay = Math.min(parseInt(videosPerDay, 10), 50);
   if (windowStart !== undefined) account.windowStart = windowStart;
   if (windowEnd !== undefined) account.windowEnd = windowEnd;
   if (active !== undefined) account.active = active;
-  save(db);
+  await save(db);
   res.json(account);
 });
 
-app.delete('/api/accounts/:id', authMiddleware, (req, res) => {
-  const db = load();
+app.delete('/api/accounts/:id', authMiddleware, async (req, res) => {
+  const db = await load();
   db.accounts = db.accounts.filter(a => !(a.id === req.params.id && a.userId === req.user.id));
-  save(db);
+  await save(db);
   res.json({ ok: true });
 });
 
 // ---------- Legendas pré-definidas ----------
-app.get('/api/captions', authMiddleware, (req, res) => {
-  const db = load();
+app.get('/api/captions', authMiddleware, async (req, res) => {
+  const db = await load();
   res.json(db.captions.filter(c => c.userId === req.user.id));
 });
 
-app.post('/api/captions', authMiddleware, (req, res) => {
+app.post('/api/captions', authMiddleware, async (req, res) => {
   const { name, text, hashtags } = req.body;
   if (!name || !text) return res.status(400).json({ error: 'Nome e legenda são obrigatórios' });
-  const db = load();
+  const db = await load();
   const caption = { id: uuid(), userId: req.user.id, name, text, hashtags: hashtags || '' };
   db.captions.push(caption);
-  save(db);
+  await save(db);
   res.json(caption);
 });
 
-app.delete('/api/captions/:id', authMiddleware, (req, res) => {
-  const db = load();
+app.delete('/api/captions/:id', authMiddleware, async (req, res) => {
+  const db = await load();
   db.captions = db.captions.filter(c => !(c.id === req.params.id && c.userId === req.user.id));
-  save(db);
+  await save(db);
   res.json({ ok: true });
 });
 
@@ -230,13 +234,13 @@ function buildSchedule(account, totalVideos) {
   return slots;
 }
 
-app.post('/api/upload', authMiddleware, upload.array('videos', 200), (req, res) => {
+app.post('/api/upload', authMiddleware, upload.array('videos', 200), async (req, res) => {
   const { accountId, caption, hashtags, cycles, batchName } = req.body;
   const files = req.files || [];
   if (!accountId) return res.status(400).json({ error: 'Selecione uma conta' });
   if (files.length === 0) return res.status(400).json({ error: 'Envie ao menos um vídeo' });
 
-  const db = load();
+  const db = await load();
   const account = db.accounts.find(a => a.id === accountId && a.userId === req.user.id);
   if (!account) return res.status(404).json({ error: 'Conta não encontrada' });
 
@@ -266,12 +270,12 @@ app.post('/api/upload', authMiddleware, upload.array('videos', 200), (req, res) 
 
   db.videos.push(...created);
   logActivity(db, req.user.id, `Upload: ${created.length} vídeo(s) agendado(s) para "${account.label}"`);
-  save(db);
+  await save(db);
   res.json({ created: created.length, videos: created });
 });
 
-app.get('/api/videos', authMiddleware, (req, res) => {
-  const db = load();
+app.get('/api/videos', authMiddleware, async (req, res) => {
+  const db = await load();
   let videos = db.videos.filter(v => v.userId === req.user.id);
   const { status, accountId, categoryId } = req.query;
   if (status) videos = videos.filter(v => v.status === status);
@@ -284,17 +288,17 @@ app.get('/api/videos', authMiddleware, (req, res) => {
   res.json(videos);
 });
 
-app.post('/api/videos/:id/cancel', authMiddleware, (req, res) => {
-  const db = load();
+app.post('/api/videos/:id/cancel', authMiddleware, async (req, res) => {
+  const db = await load();
   const video = db.videos.find(v => v.id === req.params.id && v.userId === req.user.id);
   if (!video) return res.status(404).json({ error: 'Vídeo não encontrado' });
   if (video.status === 'pendente') video.status = 'cancelado';
-  save(db);
+  await save(db);
   res.json(video);
 });
 
-app.post('/api/videos/cancel-pendentes', authMiddleware, (req, res) => {
-  const db = load();
+app.post('/api/videos/cancel-pendentes', authMiddleware, async (req, res) => {
+  const db = await load();
   let count = 0;
   db.videos.forEach(v => {
     if (v.userId === req.user.id && v.status === 'pendente') {
@@ -303,13 +307,13 @@ app.post('/api/videos/cancel-pendentes', authMiddleware, (req, res) => {
     }
   });
   logActivity(db, req.user.id, `${count} vídeo(s) pendente(s) cancelado(s)`);
-  save(db);
+  await save(db);
   res.json({ cancelled: count });
 });
 
 // ---------- Dashboard ----------
-app.get('/api/dashboard', authMiddleware, (req, res) => {
-  const db = load();
+app.get('/api/dashboard', authMiddleware, async (req, res) => {
+  const db = await load();
   const videos = db.videos.filter(v => v.userId === req.user.id);
   const accounts = db.accounts.filter(a => a.userId === req.user.id);
   const today = new Date().toDateString();
@@ -329,8 +333,8 @@ app.get('/api/dashboard', authMiddleware, (req, res) => {
 });
 
 // ---------- Activity log ----------
-app.get('/api/activity-log', authMiddleware, (req, res) => {
-  const db = load();
+app.get('/api/activity-log', authMiddleware, async (req, res) => {
+  const db = await load();
   res.json(db.activityLog.filter(l => l.userId === req.user.id).slice(0, 100));
 });
 
@@ -340,30 +344,117 @@ function adminOnly(req, res, next) {
   next();
 }
 
-app.get('/api/admin/users', authMiddleware, adminOnly, (req, res) => {
-  const db = load();
+app.get('/api/admin/users', authMiddleware, adminOnly, async (req, res) => {
+  const db = await load();
   res.json(db.users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt })));
 });
 
-// ---------- "Poster" simulado em background ----------
-// A cada 30s, verifica vídeos pendentes cujo horário já passou e simula a postagem.
-setInterval(() => {
-  const db = load();
-  const now = new Date();
-  let changed = false;
-  db.videos.forEach(v => {
-    if (v.status === 'pendente' && new Date(v.scheduledAt) <= now) {
-      // simulação: 92% de chance de sucesso, como um posting real teria falhas ocasionais
-      const success = Math.random() > 0.08;
-      v.status = success ? 'postado' : 'erro';
-      v.postedAt = success ? now.toISOString() : null;
-      v.error = success ? null : 'Falha simulada ao publicar (token expirado ou limite da API)';
-      changed = true;
-    }
+// ---------- Publicação real via Instagram Graph API ----------
+const GRAPH_API_VERSION = 'v19.0';
+const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+
+// A Graph API exige uma URL pública para o vídeo (não aceita upload binário
+// direto nesse fluxo). Por isso o app precisa saber sua própria URL pública
+// para montar o link de cada vídeo salvo em /uploads.
+function getPublicBaseUrl() {
+  if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  return `http://localhost:${PORT}`;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Publica um vídeo no Instagram como Reels. Lança erro com mensagem legível
+// em caso de falha (token inválido, vídeo não processou, etc).
+async function publishToInstagram(account, video) {
+  const videoUrl = `${getPublicBaseUrl()}/uploads/${video.filename}`;
+  const captionText = [video.caption, video.hashtags].filter(Boolean).join('\n\n');
+
+  // 1) cria o "container" de mídia a partir da URL pública do vídeo
+  const createRes = await fetch(`${GRAPH_BASE}/${account.igUserId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      media_type: 'REELS',
+      video_url: videoUrl,
+      caption: captionText,
+      access_token: account.accessToken
+    })
   });
-  if (changed) save(db);
+  const createData = await createRes.json();
+  if (!createRes.ok) {
+    throw new Error(createData?.error?.message || 'Falha ao criar o container de mídia');
+  }
+  const creationId = createData.id;
+
+  // 2) espera o Instagram terminar de processar o vídeo (pode levar segundos a minutos)
+  let status = 'IN_PROGRESS';
+  let attempts = 0;
+  while (status === 'IN_PROGRESS' && attempts < 30) {
+    await sleep(5000);
+    const statusRes = await fetch(
+      `${GRAPH_BASE}/${creationId}?fields=status_code&access_token=${account.accessToken}`
+    );
+    const statusData = await statusRes.json();
+    status = statusData.status_code;
+    attempts++;
+  }
+  if (status !== 'FINISHED') {
+    throw new Error(`Vídeo não terminou de processar a tempo (status: ${status})`);
+  }
+
+  // 3) publica de fato
+  const publishRes = await fetch(`${GRAPH_BASE}/${account.igUserId}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creation_id: creationId, access_token: account.accessToken })
+  });
+  const publishData = await publishRes.json();
+  if (!publishRes.ok) {
+    throw new Error(publishData?.error?.message || 'Falha ao publicar o vídeo');
+  }
+  return publishData.id; // ID do post publicado
+}
+
+// ---------- Publicador em background ----------
+// A cada 30s, verifica vídeos pendentes cujo horário já passou e publica de
+// verdade no Instagram, um de cada vez, para não estourar o limite da API.
+let posting = false;
+setInterval(async () => {
+  if (posting) return; // evita rodar duas vezes ao mesmo tempo se uma publicação demorar
+  posting = true;
+  try {
+    const db = await load();
+    const now = new Date();
+    const due = db.videos.filter(v => v.status === 'pendente' && new Date(v.scheduledAt) <= now);
+
+    for (const video of due) {
+      const account = db.accounts.find(a => a.id === video.accountId);
+      if (!account || !account.active) {
+        video.status = 'erro';
+        video.error = 'Conta não encontrada ou inativa';
+        continue;
+      }
+      try {
+        const postId = await publishToInstagram(account, video);
+        video.status = 'postado';
+        video.postedAt = new Date().toISOString();
+        video.error = null;
+        video.instagramPostId = postId;
+      } catch (err) {
+        video.status = 'erro';
+        video.error = err.message;
+      }
+      await save(db); // salva o progresso após cada vídeo, não só no final
+    }
+  } catch (err) {
+    console.error('Erro no ciclo do publicador:', err.message);
+  } finally {
+    posting = false;
+  }
 }, 30 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
+
 });
